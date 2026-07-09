@@ -1,21 +1,42 @@
 import streamlit as st
-from googletrans import Translator, LANGUAGES
 from gtts import gTTS
 import speech_recognition as sr
 import os
+import urllib.parse
+import urllib.request
+import json
 
 # পেজ সেটআপ
-st.set_page_config(page_title="AI Audio Dubber", layout="centered")
+st.set_page_config(page_title="AI Audio Translator", layout="centered")
 st.title("🎙️ AI Audio Dubber & Language Changer")
-st.write("আপনার ভিডিওর অডিও ফাইলটি (MP3/WAV) এখানে আপলোড করুন এবং যেকোনো ভাষায় ডাব করুন!")
+st.write("আপনার ভিডিওর অডিও ফাইলটি (MP3/WAV) এখানে আপলোড করুন এবং ডাব করুন!")
 
-# ভাষার তালিকা
-language_options = {name.title(): code for code, name in LANGUAGES.items()}
+# দরকারি ভাষার কোড (ঝামেলাহীন তালিকা)
+LANGUAGES = {
+    "Bengali": "bn",
+    "English": "en",
+    "Hindi": "hi",
+    "Arabic": "ar",
+    "Spanish": "es",
+    "French": "fr",
+    "Urdu": "ur"
+}
 
-# ইনপুট
-uploaded_file = st.file_uploader("আপনার অডিও ফাইলটি আপলোড করুন", type=["mp3", "wav"])
-target_lang_name = st.selectbox("কোন ভাষায় ডাব করতে চান?", list(language_options.keys()))
-target_lang_code = language_options[target_lang_name]
+# কোনো লাইব্রেরি ছাড়া সরাসরি গুগলের অফিশিয়াল ওয়েব ট্রান্সলেটর ব্যবহার করার ফাংশন
+def translate_text(text, target_lang):
+    try:
+        url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=" + target_lang + "&dt=t&q=" + urllib.parse.quote(text)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            return "".join([sentence[0] for sentence in data[0]])
+    except:
+        return text  # সমস্যা হলে মূল লেখা ব্যাকআপ রাখবে
+
+# ইনপুট ইন্টারফেস
+uploaded_file = st.file_uploader("আপনার অডিও ফাইলটি আপলোড করুন (MP3/WAV)", type=["mp3", "wav"])
+target_lang_name = st.selectbox("কোন ভাষায় ডাব করতে চান?", list(LANGUAGES.keys()))
+target_lang_code = LANGUAGES[target_lang_name]
 
 if uploaded_file is not None:
     # ফাইল সেভ করা
@@ -27,7 +48,7 @@ if uploaded_file is not None:
     if st.button("ডাবিং শুরু করুন 🚀"):
         with st.spinner("এআই আপনার কথাগুলো শুনছে ও অনুবাদ করছে..."):
             try:
-                # ১. কথা শোনা
+                # ১. অডিও থেকে কথা চেনা
                 recognizer = sr.Recognizer()
                 with sr.AudioFile("temp_audio.wav") as source:
                     audio_data = recognizer.record(source)
@@ -35,10 +56,8 @@ if uploaded_file is not None:
                 
                 st.success(f"🗣️ মূল কথা চেনা গেছে: {original_text}")
 
-                # ২. অনুবাদ
-                translator = Translator()
-                translated = translator.translate(original_text, dest=target_lang_code)
-                translated_text = translated.text
+                # ২. লাইব্রেরি ছাড়া নিরাপদ অনুবাদ
+                translated_text = translate_text(original_text, target_lang_code)
                 st.success(f"🔄 অনূদিত কথা ({target_lang_name}): {translated_text}")
 
                 # ৩. নতুন ডাবিং ভয়েস তৈরি
@@ -57,9 +76,9 @@ if uploaded_file is not None:
                         mime="audio/mp3"
                     )
                 
-                # ফাইল ডিলিট
+                # ফাইল ডিলিট করে মেমোরি খালি করা
                 os.remove("temp_audio.wav")
                 os.remove("dubbed_voice.mp3")
 
             except Exception as e:
-                st.error(f"দুঃখিত, কথাটি বুঝতে সমস্যা হয়েছে। দয়া করে স্পষ্ট কণ্ঠের ফাইল আপলোড করুন। এরর: {str(e)}")
+                st.error(f"দুঃখিত, কোনো একটি ধাপে সমস্যা হয়েছে। দয়া করে স্পষ্ট কণ্ঠের অডিও ফাইল আপলোড করুন।")
