@@ -5,9 +5,9 @@ import os
 import urllib.parse
 import urllib.request
 import json
-from moviepy.editor import VideoFileClip
+import av
 
-# স্ক্রিন সেটআপ (আপনার আগের কোড অনুযায়ী হুবহু এক)
+# স্ক্রিন সেটআপ (আপনার আগের ডিজাইন অনুযায়ী হুবহু এক)
 st.set_page_config(page_title="AI Video Language Changer", layout="centered")
 st.title("🌍 AI Video Language Changer (Stable Version)")
 st.write("যেকোনো ভিডিও ফাইল (MP4) আপলোড করুন এবং অন্য ভাষায় ডাব করুন সম্পূর্ণ ফ্রিতে!")
@@ -51,12 +51,19 @@ if uploaded_file is not None:
             try:
                 st.text("🗣️ ভিডিওর কথাগুলো বোঝার চেষ্টা করা হচ্ছে...")
                 
-                # [১০০% ফিক্সড লাইন]: কোনো সিস্টেম ফাইল ছাড়া ভিডিও থেকে অডিও বের করার অফিশিয়াল নিয়ম
-                video_clip = VideoFileClip("input_video.mp4")
-                video_clip.audio.write_audiofile("extracted_audio.wav", codec='pcm_s16le')
-                video_clip.close()
+                # 'av' লাইব্রেরি দিয়ে ভিডিও থেকে অডিও কন্টেইনার আলাদা করা
+                container = av.open("input_video.mp4")
+                stream = container.streams.audio[0]
                 
-                # এবার স্পিচ রিকগনিশন পানির মতো কাজ করবে
+                # র-অডিও ডাটা কনভার্ট করে সেভ করা
+                with open("extracted_audio.wav", "wb") as f_audio:
+                    for packet in container.demux(stream):
+                        for frame in packet.decode():
+                            # অডিও ফ্রেম রাইট করা
+                            f_audio.write(frame.to_ndarray().tobytes())
+                container.close()
+                
+                # স্পিচ রিকগনিশন
                 recognizer = sr.Recognizer()
                 with sr.AudioFile("extracted_audio.wav") as source:
                     recognizer.adjust_for_ambient_noise(source, duration=0.5)
@@ -71,7 +78,7 @@ if uploaded_file is not None:
                 st.success(f"🔄 অনূদিত কথা: {translated_text}")
 
                 # ৩. নতুন ডাবিং ভয়েস তৈরি (হুবহু এক)
-                st.text("🎤 নতুন ভাষায় ভয়েস ஜেনারেট করা হচ্ছে...")
+                st.text("🎤 নতুন ভাষায় ভয়েস জেনারেট করা হচ্ছে...")
                 tts = gTTS(text=translated_text, lang=target_lang_code, slow=False)
                 tts.save("dubbed_voice.mp3")
                 
