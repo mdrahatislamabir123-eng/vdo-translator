@@ -1,16 +1,22 @@
 import streamlit as st
+from googletrans import Translator, LANGUAGES
 from gtts import gTTS
 import speech_recognition as sr
 import os
 import subprocess
 
 # স্ক্রিন সেটআপ
-st.set_page_config(page_title="AI Video Language Changer", layout="centered")
-st.title("🌍 AI Video Language Changer (Final Version)")
-st.write("যেকোনো ভিডিও আপলোড করুন এবং অন্য ভাষায় পরিবর্তন করুন সম্পূর্ণ ফ্রিতে!")
+st.set_page_config(page_title="AI Universal Video Dubber", layout="centered")
+st.title("🌍 AI Universal Video Language Changer")
+st.write("যেকোনো ভিডিও আপলোড করুন এবং পৃথিবীর যেকোনো ভাষায় পরিবর্তন করুন সম্পূর্ণ ফ্রিতে!")
 
-# ইউজার ইনপুট
+# ভাষাগুলোর তালিকা তৈরি
+language_options = {name.title(): code for code, name in LANGUAGES.items()}
+
+# ইউজার ইন্টারফেস ইনপুট
 uploaded_file = st.file_uploader("আপনার ভিডিও ফাইলটি আপলোড করুন (MP4)", type=["mp4"])
+target_lang_name = st.selectbox("কোন ভাষায় পরিবর্তন করতে চান?", list(language_options.keys()))
+target_lang_code = language_options[target_lang_name]
 
 if uploaded_file is not None:
     with open("input_video.mp4", "wb") as f:
@@ -19,14 +25,13 @@ if uploaded_file is not None:
     st.video("input_video.mp4")
     
     if st.button("ভিডিওর ভাষা পরিবর্তন করুন 🚀"):
-        with st.spinner("ভিডিও প্রсеসিং চলছে... একটু সময় দিন..."):
+        with st.spinner("ভিডিও প্রসেসিং চলছে... একটু সময় দিন..."):
             try:
-                # ১. ffmpeg দিয়ে ভিডিও থেকে খাঁটি WAV অডিও আলাদা করা
+                # ১. ভিডিও থেকে অডিও আলাদা করা
                 st.text("🎵 ভিডিও থেকে অডিও আলাদা করা হচ্ছে...")
                 if os.path.exists("extracted_audio.wav"):
                     os.remove("extracted_audio.wav")
                 
-                # সিস্টেম কমান্ড ব্যবহার করে রূপান্তর
                 cmd = "ffmpeg -i input_video.mp4 -vn -acodec pcm_s16le -ar 16000 -ac 1 extracted_audio.wav -y"
                 subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 
@@ -37,19 +42,25 @@ if uploaded_file is not None:
                     audio_data = recognizer.record(source)
                     original_text = recognizer.recognize_google(audio_data)
                 
-                st.success(f"মূল কথা পাওয়া গেছে: {original_text}")
+                st.success(f"मूल কথা পাওয়া গেছে: {original_text}")
 
-                # ৩. নতুন ভাষার ভয়েস তৈরি করা (ইংরেজি অনুবাদ হিসেবে)
+                # ৩. অনুবাদ (Translation)
+                st.text(f"🔄 {target_lang_name} ভাষায় অনুবাদ করা হচ্ছে...")
+                translator = Translator()
+                translated = translator.translate(original_text, dest=target_lang_code)
+                translated_text = translated.text
+                st.success(f"অনূদিত কথা: {translated_text}")
+
+                # ৪. টেক্সট-টু-স্পিচ (নতুন ভয়েস তৈরি)
                 st.text("🎤 নতুন ভাষার ভয়েস তৈরি করা হচ্ছে...")
-                tts = gTTS(text=original_text, lang='en', slow=False)
+                tts = gTTS(text=translated_text, lang=target_lang_code, slow=False)
                 tts.save("translated_audio.mp3")
                 
-                # ৪. নতুন অডিও এবং পুরানো ভিডিও একসাথে মার্জ করে নতুন ভিডিও বানানো
-                st.text("🎬 নতুন অ디오 ভিডিওর সাথে জুড়ে দেওয়া হচ্ছে...")
+                # ৫. নতুন অডিও ভিডিওর সাথে মার্জ করা
+                st.text("🎬 নতুন অডিও ভিডিওর সাথে জুড়ে দেওয়া হচ্ছে...")
                 if os.path.exists("output_video.mp4"):
                     os.remove("output_video.mp4")
                 
-                # ffmpeg দিয়ে অডিও প্রতিস্থাপন করার কমান্ড
                 merge_cmd = "ffmpeg -i input_video.mp4 -i translated_audio.mp3 -c:v copy -map 0:v:0 -map 1:a:0 -shortest output_video.mp4 -y"
                 subprocess.run(merge_cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -61,11 +72,11 @@ if uploaded_file is not None:
                     st.download_button(
                         label="পরিবর্তিত ভিডিও ডাউনলোড করুন 📥",
                         data=file,
-                        file_name="translated_video.mp4",
+                        file_name=f"dubbed_{target_lang_name}.mp4",
                         mime="video/mp4"
                     )
                 
-                # সাময়িক ফাইলগুলো মুছে ফেলা
+                # ফাইল ক্লিনিং
                 os.remove("input_video.mp4")
                 os.remove("extracted_audio.wav")
                 os.remove("translated_audio.mp3")
