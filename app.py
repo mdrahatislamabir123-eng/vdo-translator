@@ -1,76 +1,65 @@
 import streamlit as st
+from googletrans import Translator, LANGUAGES
 from gtts import gTTS
 import speech_recognition as sr
 import os
-import wave
-import contextlib
 
-# স্ক্রিন সেটআপ
-st.set_page_config(page_title="AI Video Speech Translator", layout="centered")
-st.title("🌍 AI Video Speech & Audio Translator (100% Stable)")
-st.write("যেকোনো ভিডিও বা অডিও ফাইল আপলোড করুন এবং তার কথাগুলো টেক্সট ও নতুন ভয়েসে রূপান্তর করুন!")
+# পেজ সেটআপ
+st.set_page_config(page_title="AI Audio Dubber", layout="centered")
+st.title("🎙️ AI Audio Dubber & Language Changer")
+st.write("আপনার ভিডিওর অডিও ফাইলটি (MP3/WAV) এখানে আপলোড করুন এবং যেকোনো ভাষায় ডাব করুন!")
 
-# ইউজার ইনপুট (MP4 ভিডিও এবং সাধারণ অডিও দুইটাই কাজ করবে)
-uploaded_file = st.file_uploader("আপনার ফাইলটি আপলোড করুন (MP4, WAV, MP3)", type=["mp4", "wav", "mp3"])
+# ভাষার তালিকা
+language_options = {name.title(): code for code, name in LANGUAGES.items()}
+
+# ইনপুট
+uploaded_file = st.file_uploader("আপনার অডিও ফাইলটি আপলোড করুন", type=["mp3", "wav"])
+target_lang_name = st.selectbox("কোন ভাষায় ডাব করতে চান?", list(language_options.keys()))
+target_lang_code = language_options[target_lang_name]
 
 if uploaded_file is not None:
-    file_name = uploaded_file.name
-    with open(file_name, "wb") as f:
+    # ফাইল সেভ করা
+    with open("temp_audio.wav", "wb") as f:
         f.write(uploaded_file.read())
     
-    # স্ক্রিনে প্লেয়ার দেখানো
-    if file_name.endswith(".mp4"):
-        st.video(file_name)
-    else:
-        st.audio(file_name)
+    st.audio("temp_audio.wav")
     
-    if st.button("ভাষা ও ভয়েস রূপান্তর করুন 🚀"):
-        with st.spinner("এআই (AI) ফাইলের কথাগুলো বোঝার চেষ্টা করছে... একটু সময় দিন..."):
+    if st.button("ডাবিং শুরু করুন 🚀"):
+        with st.spinner("এআই আপনার কথাগুলো শুনছে ও অনুবাদ করছে..."):
             try:
-                # নিখুঁতভাবে কথা শোনার ট্রিক
+                # ১. কথা শোনা
                 recognizer = sr.Recognizer()
-                
-                # ফাইলটি ওপen করে ডাটা রিড করা
-                with sr.AudioFile(file_name) as source:
-                    # চারপাশের নয়েজ বা গোলমাল দূর করা
-                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
+                with sr.AudioFile("temp_audio.wav") as source:
                     audio_data = recognizer.record(source)
-                    # গুগল এআই স্পিচ দিয়ে কথা টেক্সটে রূপান্তর
                     original_text = recognizer.recognize_google(audio_data)
                 
-                st.success("📝 ফাইলের মূল কথা বা সাবটাইটেল (Subtitle):")
-                st.info(original_text)
+                st.success(f"🗣️ মূল কথা চেনা গেছে: {original_text}")
 
-                # ২. ইংরেজি ভয়েস জেনারেট করা
-                st.text("🎤 নতুন ভাষায় ভয়েস তৈরি করা হচ্ছে...")
-                tts = gTTS(text=original_text, lang='en', slow=False)
-                tts.save("translated_voice.mp3")
+                # ২. অনুবাদ
+                translator = Translator()
+                translated = translator.translate(original_text, dest=target_lang_code)
+                translated_text = translated.text
+                st.success(f"🔄 অনূদিত কথা ({target_lang_name}): {translated_text}")
+
+                # ৩. নতুন ডাবিং ভয়েস তৈরি
+                tts = gTTS(text=translated_text, lang=target_lang_code, slow=False)
+                tts.save("dubbed_voice.mp3")
                 
-                st.success("🎉 সফলভাবে নতুন ভয়েস ট্র্যাক তৈরি হয়েছে!")
-                st.audio("translated_voice.mp3")
+                st.success("🎉 আপনার ডাব করা নতুন অডিও ট্র্যাক তৈরি!")
+                st.audio("dubbed_voice.mp3")
                 
                 # ডাউনলোড বাটন
-                with open("translated_voice.mp3", "rb") as file:
+                with open("dubbed_voice.mp3", "rb") as file:
                     st.download_button(
-                        label="নতুন ডাব করা অডিও ট্র্যাক ডাউনলোড করুন 📥",
+                        label="ডাব করা অডিও ডাউনলোড করুন 📥",
                         data=file,
-                        file_name="translated_audio.mp3",
+                        file_name=f"dubbed_{target_lang_name}.mp3",
                         mime="audio/mp3"
                     )
                 
-                # ক্লিনিং
-                os.remove(file_name)
-                os.remove("translated_voice.mp3")
+                # ফাইল ডিলিট
+                os.remove("temp_audio.wav")
+                os.remove("dubbed_voice.mp3")
 
-            except sr.UnknownValueError:
-                st.error("দুঃখিত, ফাইলটির সাউন্ড একদম পরিষ্কার না হওয়ায় এআই কথাগুলো বুঝতে পারছে না। দয়া করে স্পষ্ট কণ্ঠের কোনো ভিডিও বা অডিও ট্রাই করুন।")
             except Exception as e:
-                # যদি কোনো কারণে ভিডিও ফাইল রিড করতে সমস্যা হয়, সরাসরি বাইনারি মোডে রিড করার ব্যাকআপ
-                try:
-                    with sr.AudioFile(file_name) as source:
-                        audio_data = recognizer.record(source)
-                        original_text = recognizer.recognize_google(audio_data)
-                    st.success("📝 ফাইলের মূল কথা:")
-                    st.info(original_text)
-                except:
-                    st.error(f"দুঃখিত, ভিডিও ফাইলটির অডিও ফরম্যাট একটু ভিন্ন। আপনি চাইলে এই ভিডিওটিকে যেকোনো অনলাইন কনভার্টার দিয়ে MP3 বা WAV বানিয়ে এখানে আপলোড করতে পারেন, তাহলে দ্রুত কাজ করবে! এরর: {str(e)}")
+                st.error(f"দুঃখিত, কথাটি বুঝতে সমস্যা হয়েছে। দয়া করে স্পষ্ট কণ্ঠের ফাইল আপলোড করুন। এরর: {str(e)}")
